@@ -62,7 +62,9 @@ def to_scalar_first(q):
     """
     if (q.ndim > 1) and (np.argmax(q.shape) == 0):
         q = q.T
-        return q[[3, 0, 1, 2], :]
+        return q[[3, 0, 1, 2], :].T
+    elif q.shape == (1, 4):
+        return q[:, [3, 0, 1, 2]]
     else:
         return q[[3, 0, 1, 2]]
 
@@ -208,7 +210,7 @@ def product(q, p, scalarLast=False):
     # Adjust dimensions for batch processing
     q = np.atleast_2d(q)
     p = np.atleast_2d(p)
-
+    print(f"q: {q.shape}, p: {p.shape}")
     # Convert to scalar-first format if necessary
     if scalarLast:
         q = to_scalar_first(q)

@@ -102,6 +102,10 @@ def test_product(q, q_normalized):
     q2 = np.array([5, 6, 7, 8])
     assert not np.allclose(quat.product(q1, q2), quat.product(q2, q1)), "Quaternion multiplication is commutative"
 
+    q_scalar_last = np.array([[0, 0, 0, 1]])
+    p_scalar_last = np.array([[0, 0, 0, 2]])
+    assert np.allclose(quat.product(q_scalar_last, p_scalar_last, scalarLast=True), np.array([2, 0, 0, 0]))
+
 
 def test_normalize(q, q_normalized):
     q_norm_test = quat.normalize(q)
@@ -114,6 +118,9 @@ def test_normalize(q, q_normalized):
     assert q_nd.shape == quat.normalize(q_nd).shape
 
     q = np.array([0, 0, 0, 0])
+    with pytest.raises(ArithmeticError):
+        quat.normalize(q)
+    q = np.zeros((10, 4))
     with pytest.raises(ArithmeticError):
         quat.normalize(q)
 
@@ -270,6 +277,16 @@ def test_pure_quaternion():
     # Test logarithm of pure quaternion
     q_log = quat.logarithm(np.array([0, 1, 0, 0]))
     assert np.allclose(q_log, np.array([0, np.pi / 2, 0, 0])), "Logarithm of pure quaternion failed"
+
+
+def test_to_scalar_first():
+    scalar_is_last = np.array([1, 2, 3, 4])
+    scalar_is_first = np.array([4, 1, 2, 3])
+    assert np.allclose(quat.to_scalar_first(scalar_is_last), scalar_is_first), "Scalar-last to scalar-first conversion failed"
+
+    scalar_is_last = np.ones((10, 4)) * np.array([1, 2, 3, 4])
+    scalar_is_first = np.ones((10, 4)) * np.array([4, 1, 2, 3])
+    assert np.allclose(quat.to_scalar_first(scalar_is_last), scalar_is_first), "Scalar-last to scalar-first conversion failed"
 
 
 def test_is_unit(q):
