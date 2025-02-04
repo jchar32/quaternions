@@ -5,32 +5,45 @@ import numpy as np
 
 def _validate_input(input_data, expected_shape):
     """
-    Validate the input data type.
+    Validate the input data type and shape.
 
     Parameters
     ----------
     input_data : np.ndarray
         Input data to be validated.
-    expected_shape : type
-        Expected data shape.
+    expected_shape : str
+        Expected data shape ("quaternion", "rpy", or "rotmat").
 
     Raises
     ------
     TypeError
         If the input data type does not match the expected data type.
+    ValueError
+        If the input data shape does not match the expected shape.
     """
     if not isinstance(input_data, np.ndarray):
         raise TypeError(f"Expected numpy array but got {type(input_data)}")
 
-    if expected_shape == "quaternion":
-        expected_shape_shape = (4,) if input_data.ndim == 1 else (input_data.shape[0], 4)
-    elif expected_shape == "rpy":
-        expected_shape_shape = (3,) if input_data.ndim == 1 else (input_data.shape[0], 3)
-    elif expected_shape == "rotmat":
-        expected_shape_shape = (3, 3) if input_data.ndim == 2 else (input_data.shape[0], 3, 3)
+    shape_map = {"quaternion": (4,), "rpy": (3,), "rotmat": (3, 3)}
 
-    if input_data.shape != expected_shape_shape:
-        raise AttributeError(f"Expected {expected_shape} but got {type(input_data)}")
+    if expected_shape not in shape_map:
+        raise ValueError(f"Unknown expected shape: {expected_shape}")
+
+    expected_shape_shape = shape_map[expected_shape]
+    if input_data.ndim == 1:
+        if input_data.shape != expected_shape_shape:
+            raise ValueError(f"Expected shape {expected_shape_shape} but got {input_data.shape}")
+    elif input_data.ndim == 2 and expected_shape != "rotmat":
+        if input_data.shape[1:] != expected_shape_shape:
+            raise ValueError(f"Expected shape (n, {expected_shape_shape}) but got {input_data.shape}")
+    elif input_data.ndim == 2 and expected_shape == "rotmat":
+        if input_data.shape != expected_shape_shape:
+            raise ValueError(f"Expected shape ({expected_shape_shape}) but got {input_data.shape}")
+    elif input_data.ndim == 3 and expected_shape == "rotmat":
+        if input_data.shape[1:] != expected_shape_shape:
+            raise ValueError(f"Expected shape (n, {expected_shape_shape}) but got {input_data.shape}")
+    else:
+        raise ValueError(f"Invalid input data dimensions: {input_data.ndim}")
 
 
 def to_scalar_first(q):

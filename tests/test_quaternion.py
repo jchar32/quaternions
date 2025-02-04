@@ -21,6 +21,67 @@ def test_incorrect_type():
         quat.product(q, q)
 
 
+def test_validate_input_nomatch():
+    with pytest.raises(ValueError):
+        quat._validate_input(np.array([0]), "notrecognized")
+
+
+def test_validate_input_quaternion():
+    q = np.array([1, 0, 0, 0])
+    quat._validate_input(q, "quaternion")
+    q = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+    quat._validate_input(q, "quaternion")
+
+
+def test_validate_input_rpy():
+    rpy = np.array([0, 0, 0])
+    quat._validate_input(rpy, "rpy")
+    rpy = np.array([[0, 0, 0], [1, 1, 1]])
+    quat._validate_input(rpy, "rpy")
+
+
+def test_validate_input_rotmat():
+    rotmat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    quat._validate_input(rotmat, "rotmat")
+    rotmat = np.array([[[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]])
+    quat._validate_input(rotmat, "rotmat")
+    with pytest.raises(ValueError):
+        rotmat = np.array([[1, 2, 3], [3, 2, 1]])
+        quat._validate_input(rotmat, "rotmat")
+    rotmat = rotmat = np.random.rand(2, 3, 3)
+    quat._validate_input(rotmat, "rotmat")
+    rotmat = np.random.rand(2, 3, 5)
+    with pytest.raises(ValueError):
+        quat._validate_input(rotmat, "rotmat")
+
+
+def test_validate_input_invalid_type():
+    invalid = [1, 2, 3, 4]
+    with pytest.raises(TypeError):
+        quat._validate_input(invalid, "quaternion")
+    invalid = 1.0
+    with pytest.raises(TypeError):
+        quat._validate_input(invalid, "rpy")
+    invalid = int(1)
+    with pytest.raises(TypeError):
+        quat._validate_input(invalid, "rotmat")
+
+
+def test_validate_input_invalid_shape():
+    invalid = np.array([1, 2, 3, 4, 5])
+    with pytest.raises(ValueError):
+        quat._validate_input(invalid, "quaternion")
+    invalid = np.array([[1, 2, 3], [4, 5, 6]])
+    with pytest.raises(ValueError):
+        quat._validate_input(invalid, "quaternion")
+    invalid = np.array([1, 2, 3])
+    with pytest.raises(ValueError):
+        quat._validate_input(invalid, "rotmat")
+    with pytest.raises(ValueError):
+        invalid = np.random.rand(2, 3, 4, 5, 5)
+        quat._validate_input(invalid, "quaternion")
+
+
 def test_product(q, q_normalized):
     q_inv = np.array([q_normalized[0], -q_normalized[1], -q_normalized[2], -q_normalized[3]])
     result = quat.product(q_normalized, q_inv)
@@ -28,7 +89,7 @@ def test_product(q, q_normalized):
     assert np.allclose(result, identity), "Product of quaternion and its inverse is not identity"
 
     q_5 = np.array([1, 2, 3, 4, 5])
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         quat.product(q_5, q_5)
     q_nd = np.array([[1, 2, 3, 4], [4, 3, 2, 1]])
     assert q_nd.shape == quat.product(q_nd, q_nd).shape
@@ -47,7 +108,7 @@ def test_normalize(q, q_normalized):
     assert np.array_equal(q_norm_test, q_normalized), "Length of normalized quaternion is not 1"
 
     q_5 = np.array([1, 2, 3, 4, 5])
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         quat.normalize(q_5)
     q_nd = np.array([[1, 2, 3, 4], [4, 3, 2, 1]])
     assert q_nd.shape == quat.normalize(q_nd).shape
