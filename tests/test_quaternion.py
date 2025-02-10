@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from src.quaternions import quaternions as quat
+from src import quaternions as quat
 
 
 @pytest.fixture
