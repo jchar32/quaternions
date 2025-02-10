@@ -12,19 +12,22 @@ def _validate_input(input_data, expected_shape):
     input_data : np.ndarray
         Input data to be validated.
     expected_shape : str
-        Expected data shape ("quaternion", "rpy", or "rotmat").
+        Expected data shape ("quaternion", "euler", or "rotmat").
 
     Raises
     ------
     TypeError
         If the input data type does not match the expected data type.
     ValueError
-        If the input data shape does not match the expected shape.
+        If the input data shape does not match the expected shape or contains nonfinite elements.
     """
     if not isinstance(input_data, np.ndarray):
         raise TypeError(f"Expected numpy array but got {type(input_data)}")
 
-    shape_map = {"quaternion": (4,), "rpy": (3,), "rotmat": (3, 3)}
+    if not np.all(np.isfinite(input_data)):
+        raise ValueError("Input data contains non-finite values")
+
+    shape_map = {"quaternion": (4,), "euler": (3,), "rotmat": (3, 3)}
 
     if expected_shape not in shape_map:
         raise ValueError(f"Unknown expected shape: {expected_shape}")
@@ -48,16 +51,16 @@ def _validate_input(input_data, expected_shape):
 
 def to_scalar_first(q):
     """
-    Converts a quaternion from scalar last to scalar first.
+    Converts a quaternion from scalar-last to scalar-first format.
 
     Parameters
     ----------
-    q : ndarray
+    q : np.ndarray
         Quaternion with scalar last.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Quaternion with scalar first.
     """
     if (q.ndim > 1) and (np.argmax(q.shape) == 0):
@@ -75,12 +78,14 @@ def conjugate(q, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion assuming scalar first.
+    q : np.ndarray
+        Quaternion, assumed to be in scalar-first format.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Conjugate of q.
     """
     q_out = q * np.array([1, -1, -1, -1]) if not scalarLast else q * np.array([-1, -1, -1, 1])
@@ -93,12 +98,14 @@ def inverse(q, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion assuming scalar first.
+    q : np.ndarray
+        Quaternion, assumed to be in scalar-first format.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Inverse of q.
     """
 
@@ -111,12 +118,14 @@ def exponential(q, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion assuming scalar first.
+    q : np.ndarray
+        Quaternion, assumed to be in scalar-first format.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Exponential of q.
     """
     if is_real(q):
@@ -135,12 +144,14 @@ def logarithm(q, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
+    q : np.ndarray
         Quaternion.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Logarithm of q.
     """
     q0 = q[0] if not scalarLast else q[3]
@@ -162,18 +173,20 @@ def normalize(q, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion assuming scalar first.
+    q : np.ndarray
+        Quaternion, assumed to be in scalar-first format.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
-        Normalized q.
+    np.ndarray
+        Normalized quaternion.
 
-    Notes
-    -----
-    This function calculates the normalized quaternion.
-
+    Raises
+    ------
+    ArithmeticError
+        If there is a division by zero when normalizing.
     """
     _validate_input(q, "quaternion")
     if q.ndim > 1:
@@ -191,16 +204,16 @@ def product(q, p, scalarLast=False):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion(s) in scalar-first or scalar-last format. Shape can be (4,) or (n, 4).
-    p : ndarray
-        Quaternion(s) in scalar-first or scalar-last format. Shape can be (4,) or (n, 4).
+    q : np.ndarray
+        Quaternion(s) in scalar-first or scalar-last format (shape (4,) or (n, 4)).
+    p : np.ndarray
+        Quaternion(s) in scalar-first or scalar-last format (shape (4,) or (n, 4)).
     scalarLast : bool, optional
-        Whether the input quaternions are in scalar-last format (default is False).
+        If True, input quaternions are in scalar-last format. Default is False.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Hamilton product of q and p, with the same shape as the inputs.
     """
     # Ensure inputs are valid quaternions
@@ -210,7 +223,7 @@ def product(q, p, scalarLast=False):
     # Adjust dimensions for batch processing
     q = np.atleast_2d(q)
     p = np.atleast_2d(p)
-    print(f"q: {q.shape}, p: {p.shape}")
+
     # Convert to scalar-first format if necessary
     if scalarLast:
         q = to_scalar_first(q)
@@ -236,17 +249,17 @@ def product(q, p, scalarLast=False):
 
 def is_real(q):
     """
-    Returns True if the quaternion is real (i.e., vector part is zero).
+    Returns True if the quaternion is real (i.e., its vector part is zero).
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion(s) in scalar-first or scalar-last format. Shape can be (4,) or (n, 4).
+    q : np.ndarray
+        Quaternion(s) in scalar-first or scalar-last format.
 
     Returns
     -------
-    ndarray
-        Boolean array indicating if the quaternion is real.
+    bool or np.ndarray
+        Boolean value (or array) indicating if the quaternion is real.
     """
     # Ensure input is a valid quaternion
     _validate_input(q, "quaternion")
@@ -257,17 +270,17 @@ def is_real(q):
 
 def is_pure(q):
     """
-    Returns True if the quaternion is pure (i.e., scalar part is zero).
+    Returns True if the quaternion is pure (i.e., its scalar part is zero).
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion(s) in scalar-first or scalar-last format. Shape can be (4,) or (n, 4).
+    q : np.ndarray
+        Quaternion(s) in scalar-first or scalar-last format.
 
     Returns
     -------
-    ndarray
-        Boolean array indicating if the quaternion is pure.
+    bool or np.ndarray
+        Boolean value (or array) indicating if the quaternion is pure.
     """
     # Ensure input is a valid quaternion
     _validate_input(q, "quaternion")
@@ -282,13 +295,13 @@ def is_unit(q):
 
     Parameters
     ----------
-    q : ndarray
-        Quaternion(s) in scalar-first or scalar-last format. Shape can be (4,) or (n, 4).
+    q : np.ndarray
+        Quaternion(s) in scalar-first or scalar-last format.
 
     Returns
     -------
-    ndarray
-        Boolean array indicating if the quaternion is a unit quaternion.
+    bool or np.ndarray
+        Boolean value (or array) indicating if the quaternion is a unit quaternion.
     """
     # Ensure input is a valid quaternion
     _validate_input(q, "quaternion")
@@ -299,16 +312,16 @@ def is_unit(q):
 
 def identity(n=1):
     """
-    Returns the identity quaternion.
+    Returns the identity quaternion(s).
 
     Parameters
     ----------
     n : int, optional
-        Number of identity quaternions to generate (default is 1).
+        Number of identity quaternions to generate. Default is 1.
 
     Returns
     -------
-    ndarray
+    np.ndarray
         Identity quaternion(s) with shape (n, 4).
     """
     return np.hstack((np.ones((n, 1)), np.zeros((n, 3))))
@@ -316,33 +329,27 @@ def identity(n=1):
 
 def quat_rotate(q, v):
     """
-    Rotate a vector or batch of vectors using a quaternion or batch of quaternions.
+    Rotate a vector or a batch of vectors using a quaternion or batch of quaternions.
 
-    This function applies the quaternion rotation formula to rotate 3D vectors `v` by quaternions `q`.
-    The rotation is performed using the operation:
-        q * v * q^-1
-    where `v` is treated as a pure quaternion with a scalar part of zero.
-
-    Parameters:
+    Parameters
     ----------
     q : array-like
-        A 4-element array for a single quaternion or an (N, 4) array for a batch of quaternions,
-        where each quaternion is in the format [q1, q2, q3, q4]:
-        - q1: scalar part of the quaternion.
-        - q2, q3, q4: vector (imaginary) components of the quaternion.
+        A 4-element array for a single quaternion or an (N, 4) array for a batch of quaternions.
     v : array-like
-        A 3-element array for a single vector or an (N, 3) array for a batch of vectors to be rotated.
+        A 3-element array for a single vector or an (N, 3) array for a batch of vectors.
 
-    Returns:
+    Returns
     -------
-    numpy.ndarray
-        A 3-element array for a single rotated vector or an (N, 3) array for a batch of rotated vectors.
+    np.ndarray
+        A 3-element array for a rotated vector or an (N, 3) array for a batch of rotated vectors.
 
-    Notes:
+    Notes
     -----
-    - The quaternion `q` should be normalized for correct rotation.
-    - The scalar part of the resulting quaternion is discarded, returning only the vector part.
+    The function applies the rotation formula: q * v * q⁻¹, treating v as a pure quaternion.
     """
+    _validate_input(q, "quaternion")
+    _validate_input(v, "euler")
+
     q = np.asarray(q)
     v = np.asarray(v)
 
@@ -370,29 +377,21 @@ def quat_rotate(q, v):
 
 def yaw_quat(q):
     """
-    Calculate the yaw (rotation about the vertical axis) from a quaternion or batch of quaternions.
+    Calculate the yaw angle (rotation about the vertical axis) from a quaternion.
 
-    The quaternion is expected in the form [q1, q2, q3, q4], where:
-    - q1: scalar part of the quaternion.
-    - q2, q3, q4: vector (imaginary) components of the quaternion.
-
-    The yaw is computed based on the rotation matrix representation derived from the quaternion.
-    The result is expressed in degrees.
-
-    Parameters:
+    Parameters
     ----------
     q : array-like
-        A 4-element array or an (N, 4) array for a batch of quaternions, each in the format [q1, q2, q3, q4].
+        A 4-element array or an (N, 4) array for a batch of quaternions.
 
-    Returns:
+    Returns
     -------
-    numpy.ndarray or float
-        The yaw angle(s) in degrees, ranging from -180 to 180.
+    float or np.ndarray
+        Yaw angle in degrees (or an array of yaw angles), ranging from -180 to 180.
 
-    Notes:
+    Notes
     -----
-    - Positive yaw corresponds to a counterclockwise rotation about the vertical axis (Z-axis).
-    - This calculation assumes a right-handed coordinate system.
+    Positive yaw corresponds to a counterclockwise rotation about the vertical axis.
     """
     q = np.asarray(q)
 
@@ -417,34 +416,22 @@ def yaw_quat(q):
 
 def to_angles(q, scalarLast=False):
     """
-     Returns the angles of a quaternion.
+    Returns the Euler angles (phi, theta, psi) from a quaternion.
 
-     Parameters
-     ----------
-     q : ndarray
-         Quaternion assuming scalar first.
-     scalarLast : bool, optional
-         Flag indicating whether the scalar component is the last element of the quaternion.
-         Default is False.
+    Parameters
+    ----------
+    q : np.ndarray
+        Quaternion, assumed to be in scalar-first format.
+    scalarLast : bool, optional
+        If True, q is assumed to be in scalar-last format. Default is False.
 
-     Returns
-     -------
-     ndarray
-         Angles of the quaternion in phi, theta, psi.
-
-     Notes
-     -----
-     This function calculates the angles of a quaternion using the formula from the paper
-     "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence" by Shuster and Oh.
-     The implementation is based on the pytransform3d and scipy libraries for XYZ sequence.
-
-    References
-     ----------
-     - Bernardes & Viollet (2018). "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence". Journal of Aerospace Technology and Management. https://doi.org/10.1371/journal.pone.0276302
-     - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
-     - scipy: https://www.scipy.org/
-
+    Returns
+    -------
+    np.ndarray
+        Euler angles in the order (phi, theta, psi).
     """
+    _validate_input(q, "quaternion")
+
     if q.ndim > 1:
         q = q.T
 
@@ -464,80 +451,57 @@ def to_angles(q, scalarLast=False):
     return euler_angles
 
 
-def from_angles(angles: np.ndarray, order="rpy"):
+def from_angles(angles: np.ndarray, order="xyz"):
     """
-    Returns the quaternion from a series of roll (about x axis), pitch (about y axis), and yaw (about z axis) angles.
+    Returns the quaternion from a series of xyz Euler angles represented as extrinsic rotations (global frame).
 
     Parameters
     ----------
-    angles : ndarray
-        Roll, pitch, yaw angles. Can be 1D (e.g., [r, p, y]) or 2D with nx3 (e.g., [[r_t1, p_t1, y_t1], [r_t2, p_t2, y_t2], ...]).
+    angles : np.ndarray
+        x, y, and z angles. Either a 1D array ([x, y, z]) or a 2D array with shape (n, 3).
     order : str, optional
-        Order of the angles. Default is "rpy" or "XYZ".
+        Order of the angles. Supported orders are "xyz", "xzy", "yzx", "zxy", and "zyx". Default is "xyz".
+
     Returns
     -------
-    ndarray
-        Quaternion in scalar first form.
+    np.ndarray
+        Quaternion in scalar-first form.
 
-    References
-    ----------
-     - Bernardes & Viollet (2018). "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence". Journal of Aerospace Technology and Management. https://doi.org/10.1371/journal.pone.0276302
-     - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
-     - scipy: https://www.scipy.org/
     """
     if angles.ndim > 1:
         angles = angles.T
-    roll, pitch, yaw = angles
+    order = order.upper()
+    _validate_input(angles, "euler")
 
-    cy = np.cos(yaw * 0.5)
-    sy = np.sin(yaw * 0.5)
-    cp = np.cos(pitch * 0.5)
-    sp = np.sin(pitch * 0.5)
-    cr = np.cos(roll * 0.5)
-    sr = np.sin(roll * 0.5)
+    axes = {"X": [1, 0, 0], "Y": [0, 1, 0], "Z": [0, 0, 1]}
+    quaternions = [from_axis_angle([angle, *axes[axis]]) for axis, angle in zip(order, angles)]
 
-    if order == "rpy":
-        q = np.array(
-            [
-                -sr * sp * sy + cr * cp * cy,
-                sr * cp * cy + sp * sy * cr,
-                -sr * sy * cp + sp * cr * cy,
-                sr * sp * cy + sy * cr * cr,
-            ]
-        )
-    elif order == "ryp":
-        q = np.array(
-            [
-                sr * sy * sp + cr * cy * cp,
-                sr * cy * cp - sy * sp * cr,
-                -sr * sy * cp + sp * cr * cy,
-                sr * sp * cy + sy * cr * cr,
-            ]
-        )
+    q = quaternions[0]
+    for quat in quaternions[1:]:
+        q = product(q, quat)
 
-    # validate data dimensions in correct order
-    if np.argmax(q.shape) != 0:
-        q = q.T
     return q
 
 
 def to_rotmat(q, scalarLast=False, homogenous=True):
-    """Converts a quaternion to a right hand rotation matrix. Choice of inhomogeneous or homogeneous representation (latter is preferred). If the quaternion is not a unit quaternion, the homogenous representation is still a scalar multiple of a rotation matrix while the inhomogeneous representation is not an orthogonal rotation matrix.
+    """
+    Converts a quaternion to a right-handed rotation matrix.
 
     Parameters
     ----------
-    q : ndarray
-        unit quaternion in shape (4,) or (n, 4)
+    q : np.ndarray
+        Unit quaternion in shape (4,) or (n, 4).
     scalarLast : bool, optional
-        Flag indicating whether the quaternion is in scalar-last format. Default is False
+        If True, q is assumed to be in scalar-last format. Default is False.
     homogenous : bool, optional
-        Flag indicating whether the rotation matrix should be in homogeneous form. Default is True
+        If True, returns a homogeneous rotation matrix. Default is True.
 
     Returns
     -------
-    ndarray
-        Rotation matrix representation of the original quaternion.
+    np.ndarray
+        Rotation matrix representation of the quaternion.
     """
+    _validate_input(q, "quaternion")
     q = normalize(q)
     if scalarLast:
         q = to_scalar_first(q)
@@ -588,39 +552,31 @@ def to_rotmat(q, scalarLast=False, homogenous=True):
                 ]
             )
     return R.squeeze() if R.shape[0] == 1 else R
-    # return R_out if R_out.shape[0] > 1 else R_out.squeeze()
 
 
 def from_rotmat(R: np.ndarray):
     """
-    Converts a 3x3 orthonormal rotation matrix to a quaternion in scalar first form.
+    Converts a 3x3 orthonormal rotation matrix to a quaternion in scalar-first form.
 
     Parameters
     ----------
     R : np.ndarray
-        Orthogonal rotation matrix 3x3 or Nx3x3. where N is time samples of each 3x3 matrix
+        A 3x3 or (N, 3, 3) orthogonal rotation matrix (or matrices).
 
     Returns
     -------
     np.ndarray
-        Quaternion in scalar first form.
+        Quaternion in scalar-first form.
 
     Raises
     ------
     ValueError
-        If R is not a 2 or 3 dimensional matrix or if R shape is not (3, 3).
+        If R is not a 2D or 3D matrix with shape (3, 3) or (N, 3, 3).
 
     Warns
     -----
     UserWarning
         If R is not orthogonal.
-
-    Notes
-    -----
-    This function expects a 3x3 or Nx3x3 matrix. If you pass a matrix with a different shape, a ValueError will be raised.
-    If R is not orthogonal, a UserWarning will be issued.
-
-    Somewhat slow running due to the for loops need in the event of passing an Nx3x3 matrix. Not sure how to vectorize this...
     """
     # largest_dim = np.argmax(R.shape)
     if R.ndim not in [2, 3]:
@@ -675,15 +631,22 @@ def from_rotmat(R: np.ndarray):
 
 def from_axis_angle(ax: np.ndarray, angleFirst=True):
     """
-    Convert a rotation in axis angle form to a quaternion in scalar first form.
+    Convert a rotation in axis-angle form to a quaternion in scalar-first form.
 
-    Parameters:
-        ax (np.ndarray): Array containing the unit vectors of the axis and the angle.
-        angleFirst (bool, optional): Order of elements in ax. Defaults to False.
+    Parameters
+    ----------
+    ax : np.ndarray
+        Array containing the angle and the unit axis.
+    angleFirst : bool, optional
+        If True, the angle is the first element in `ax`. Default is True.
 
-    Returns:
-        np.ndarray: Quaternion in scalar first form.
+    Returns
+    -------
+    np.ndarray
+        Quaternion in scalar-first form.
     """
+    if not isinstance(ax, np.ndarray):
+        ax = np.asarray(ax)
 
     if ax.ndim == 1:
         ax = ax[np.newaxis, :]

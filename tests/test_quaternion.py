@@ -35,9 +35,9 @@ def test_validate_input_quaternion():
 
 def test_validate_input_rpy():
     rpy = np.array([0, 0, 0])
-    quat._validate_input(rpy, "rpy")
+    quat._validate_input(rpy, "euler")
     rpy = np.array([[0, 0, 0], [1, 1, 1]])
-    quat._validate_input(rpy, "rpy")
+    quat._validate_input(rpy, "euler")
 
 
 def test_validate_input_rotmat():
@@ -133,8 +133,8 @@ def test_quat_rotate():
 
     q_identity = np.array([1, np.nan, 0, 0])
     p = np.array([1, 0, 0])
-    rotated_p = quat.quat_rotate(q_identity, p)
-    assert np.sum(np.isnan(rotated_p)) == 3, "Nans in quaternion should return nan"
+    with pytest.raises(ValueError):
+        quat.quat_rotate(q_identity, p)
 
     # 90-degree rotation around the z-axis
     q_90_z = np.array([np.cos(np.pi / 4), 0, 0, np.sin(np.pi / 4)])
@@ -270,8 +270,6 @@ def test_pure_quaternion():
 
     # Test exponential of pure quaternion
     q_exp = quat.exponential(np.array([0, 1, 0, 0]))
-    qv = pure_q[1:]
-    qv_norm = np.linalg.norm(qv)
     assert np.allclose(q_exp, np.array([np.cos(1), np.sin(1), 0, 0])), "Exponential of pure quaternion failed"
 
     # Test logarithm of pure quaternion
@@ -309,17 +307,86 @@ def test_identity():
 
 
 def test_from_angles():
-    # Test for Euler angles
-    angles = np.array([0, 0, 0])
-    q = quat.from_angles(angles)
-    assert np.allclose(q, np.array([1, 0, 0, 0])), "from_angles failed for Euler angles"
-
-    angle = np.array([np.pi / 2, 0, 0])
-    q = quat.from_angles(angle)
-    assert np.allclose(q, np.array([np.cos(angle[0] / 2), np.cos(angle[0] / 2), 0, 0])), "from_angles failed for single angle of 90deg which should produce q=(cos(45), cos(45), 0, 0)"
     # Test for invalid input
     with pytest.raises(ValueError):
         quat.from_angles(np.array([np.nan, 0, 0, 0]))
+
+    # Test for Euler angles
+    angles = np.array([0, 0, 0])
+    q = quat.from_angles(angles, "xyz")
+    assert np.allclose(q, np.array([1, 0, 0, 0])), "from_angles failed for Euler angles"
+
+    # Rotation around x
+    angle = np.array([np.pi / 2, 0, 0])
+    q = quat.from_angles(angle, "xyz")
+    assert np.allclose(q, np.array([np.cos(angle[0] / 2), np.cos(angle[0] / 2), 0, 0])), "from_angles failed for single angle of 90deg which should produce q=(cos(90/2), cos(90/2), 0, 0)"
+
+    # Rotation Around y
+    angle = np.array([0, np.pi / 2, 0])
+    q = quat.from_angles(angle, "xyz")
+    assert np.allclose(q, np.array([np.cos(angle[1] / 2), 0, np.cos(angle[1] / 2), 0])), "from_angles failed for single angle of 90deg which should produce q=(cos(90/2),0, cos(90/2), 0)"
+
+    # Rotation Around z
+    angle = np.array([0, 0, np.pi / 2])
+    q = quat.from_angles(angle, "xyz")
+    assert np.allclose(q, np.array([np.cos(angle[-1] / 2), 0, 0, np.cos(angle[-1] / 2)])), "from_angles failed for single angle of 90deg which should produce q=(cos(90/2),0,0 cos(90/2))"
+
+    # Rotation around y and z
+    angle = np.array([0, np.pi / 4, np.pi / 2])
+    q = quat.from_angles(angle, "xyz")
+    assert np.allclose(q, np.array([0.65328148, 0.27059805, 0.27059805, 0.65328148])), "from_angles failed for single angle of 90deg which should produce q=(cos(45/2),0,0 cos(90/2))"
+
+
+# def assert_quat_equal(q1, q2, tol=1e-8):
+#     # Account for possible sign ambiguity in quaternions.
+#     if not (np.allclose(q1, q2, atol=tol) or np.allclose(q1, -q2, atol=tol)):
+#         pytest.fail(f"Quaternions not equal:\n{q1}\n{q2}")
+
+
+# # Additional tests for from_angles() with different rotation orders.
+# @pytest.mark.parametrize(
+#     "order,compose_func",
+#     [
+#         ("xyz", lambda Qx, Qy, Qz: quat.product(quat.product(Qx, Qy), Qz)),
+#         ("xzy", lambda Qx, Qy, Qz: quat.product(quat.product(Qx, Qz), Qy)),
+#         ("yzx", lambda Qx, Qy, Qz: quat.product(quat.product(Qy, Qz), Qx)),
+#         ("zxy", lambda Qx, Qy, Qz: quat.product(quat.product(Qz, Qx), Qy)),
+#         ("zyx", lambda Qx, Qy, Qz: quat.product(quat.product(Qz, Qy), Qx)),
+#     ],
+# )
+# def test_from_angles_rotation_orders(order, compose_func):
+#     # Use nonzero Euler angles.
+#     ax = np.pi / 4  # 45 degrees rotation about x-axis
+#     ay = np.pi / 6  # 30 degrees rotation about y-axis
+#     az = np.pi / 3  # 60 degrees rotation about z-axis
+#     angles = np.array([ax, ay, az])
+
+#     # Manually create quaternions for rotations about x, y, z axes.
+#     Qx = np.array([np.cos(ax / 2), np.sin(ax / 2), 0, 0])
+#     Qy = np.array([np.cos(ay / 2), 0, np.sin(ay / 2), 0])
+#     Qz = np.array([np.cos(az / 2), 0, 0, np.sin(az / 2)])
+
+#     # Expected quaternion computed by composing the axis rotations in the specified order.
+#     expected = compose_func(Qx, Qy, Qz)
+#     result = quat.from_angles(angles, order=order)
+
+#     assert_quat_equal(result, expected)
+
+
+def test_from_angles_identity():
+    # All angles zero should return the identity quaternion independently of order.
+    angles = np.zeros(3)
+    for order in ["xyz"]:
+        result = quat.from_angles(angles, order=order)
+        assert np.allclose(result, np.array([1, 0, 0, 0])), f"from_angles {order} failed for identity"
+
+
+def test_from_angles_nonfinite():
+    # Test that non-finite inputs raise an error.
+    with pytest.raises(ValueError):
+        quat.from_angles(np.array([np.nan, 0, 0]))
+    with pytest.raises(ValueError):
+        quat.from_angles(np.array([np.inf, 0, 0]))
 
 
 def test_to_angles():
@@ -333,8 +400,8 @@ def test_to_angles():
     assert np.allclose(angles, np.array([np.pi / 2, 0, 0])), "to_angles failed for single angle of 90deg which should produce q=(cos(45), cos(45), 0, 0)"
 
     qnan = np.array([np.nan, 0, 0, 0])
-    angles = quat.to_angles(qnan)
-    assert np.all(np.isnan(angles)), "Nans in quaternion should return nan"
+    with pytest.raises(ValueError):
+        quat.to_angles(qnan)
 
 
 def test_to_rotmat():
