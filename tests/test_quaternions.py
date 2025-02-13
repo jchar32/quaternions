@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from src import quaternions as quat
+
+from . import quaternions as quat
 
 
 @pytest.fixture
@@ -55,6 +56,7 @@ def test_validate_input_rotmat():
         quat._validate_input(rotmat, "rotmat")
 
 
+# TODO: Add functionality to accept list and convert to ndarray
 def test_validate_input_invalid_type():
     invalid = [1, 2, 3, 4]
     with pytest.raises(TypeError):
@@ -136,6 +138,11 @@ def test_quat_rotate():
     with pytest.raises(ValueError):
         quat.quat_rotate(q_identity, p)
 
+    q = np.array([[0, 0, 0, 1], [0, 0, 0, 1]])
+    v = np.array([1, 0, 0])
+    with pytest.raises(ValueError):
+        quat.quat_rotate(q, v)
+
     # 90-degree rotation around the z-axis
     q_90_z = np.array([np.cos(np.pi / 4), 0, 0, np.sin(np.pi / 4)])
     p = np.array([1, 0, 0])
@@ -153,6 +160,11 @@ def test_quat_rotate():
     p = np.array([0, 1, 0])
     rotated_p = quat.quat_rotate(q_180_x, p)
     assert np.allclose(rotated_p, [0, -1, 0]), "180-degree rotation around x-axis is incorrect"
+
+    q_batch = np.array([[1, 0, 0, 0.1], [1, 0, 0, 0.1], [1, 0, 0, 0.1]])
+    v_batch = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    rotated_batch = quat.quat_rotate(q_batch, v_batch)
+    assert rotated_batch.shape == (3, 3), "Batch rotation should have correct shape"
 
 
 def test_conjugate(q, q_normalized):
@@ -185,7 +197,6 @@ def test_inverse(q, q_normalized):
     assert np.allclose(q_inv_normalized, expected_inverse_normalized), "Inverse failed for normalized q"
 
 
-# Test for exponential function
 def test_exponential(q, q_normalized):
     # Test exponential for a non-normalized quaternion
     q_exp = quat.exponential(q)
@@ -259,7 +270,6 @@ def test_identity_quaternion_computations():
 
 # Edge case test: pure quaternion (no scalar part)
 def test_pure_quaternion():
-    # pure_q = np.array([0, 1, 2, 3])
     pure_q = np.array([0, 1, 0, 0])
     # Test inverse of pure quaternion
     q_inv = quat.inverse(pure_q)
@@ -336,47 +346,8 @@ def test_from_angles():
     q = quat.from_angles(angle, "xyz")
     assert np.allclose(q, np.array([0.65328148, 0.27059805, 0.27059805, 0.65328148])), "from_angles failed for single angle of 90deg which should produce q=(cos(45/2),0,0 cos(90/2))"
 
-
-# def assert_quat_equal(q1, q2, tol=1e-8):
-#     # Account for possible sign ambiguity in quaternions.
-#     if not (np.allclose(q1, q2, atol=tol) or np.allclose(q1, -q2, atol=tol)):
-#         pytest.fail(f"Quaternions not equal:\n{q1}\n{q2}")
-
-
-# # Additional tests for from_angles() with different rotation orders.
-# @pytest.mark.parametrize(
-#     "order,compose_func",
-#     [
-#         ("xyz", lambda Qx, Qy, Qz: quat.product(quat.product(Qx, Qy), Qz)),
-#         ("xzy", lambda Qx, Qy, Qz: quat.product(quat.product(Qx, Qz), Qy)),
-#         ("yzx", lambda Qx, Qy, Qz: quat.product(quat.product(Qy, Qz), Qx)),
-#         ("zxy", lambda Qx, Qy, Qz: quat.product(quat.product(Qz, Qx), Qy)),
-#         ("zyx", lambda Qx, Qy, Qz: quat.product(quat.product(Qz, Qy), Qx)),
-#     ],
-# )
-# def test_from_angles_rotation_orders(order, compose_func):
-#     # Use nonzero Euler angles.
-#     ax = np.pi / 4  # 45 degrees rotation about x-axis
-#     ay = np.pi / 6  # 30 degrees rotation about y-axis
-#     az = np.pi / 3  # 60 degrees rotation about z-axis
-#     angles = np.array([ax, ay, az])
-
-#     # Manually create quaternions for rotations about x, y, z axes.
-#     Qx = np.array([np.cos(ax / 2), np.sin(ax / 2), 0, 0])
-#     Qy = np.array([np.cos(ay / 2), 0, np.sin(ay / 2), 0])
-#     Qz = np.array([np.cos(az / 2), 0, 0, np.sin(az / 2)])
-
-#     # Expected quaternion computed by composing the axis rotations in the specified order.
-#     expected = compose_func(Qx, Qy, Qz)
-#     result = quat.from_angles(angles, order=order)
-
-#     assert_quat_equal(result, expected)
-
-
-def test_from_angles_identity():
-    # All angles zero should return the identity quaternion independently of order.
     angles = np.zeros(3)
-    for order in ["xyz"]:
+    for order in ["xyz", "zyx", "yxz", "zxy", "yzx", "xzy"]:
         result = quat.from_angles(angles, order=order)
         assert np.allclose(result, np.array([1, 0, 0, 0])), f"from_angles {order} failed for identity"
 
@@ -395,6 +366,10 @@ def test_to_angles():
     angles = quat.to_angles(q)
     assert np.allclose(angles, np.array([0, 0, 0])), "to_angles failed for Euler angles"
 
+    q = np.array([0, 0, 0, 1])
+    angles = quat.to_angles(q, scalarLast=True)
+    assert np.allclose(angles, np.array([0, 0, 0])), "to_angles failed for Euler angles"
+
     q = np.array([np.pi / 2, np.pi / 2, 0, 0]) / np.linalg.norm([np.pi / 2, np.pi / 2, 0, 0])
     angles = quat.to_angles(q)
     assert np.allclose(angles, np.array([np.pi / 2, 0, 0])), "to_angles failed for single angle of 90deg which should produce q=(cos(45), cos(45), 0, 0)"
@@ -402,6 +377,20 @@ def test_to_angles():
     qnan = np.array([np.nan, 0, 0, 0])
     with pytest.raises(ValueError):
         quat.to_angles(qnan)
+
+    with pytest.raises(ValueError):
+        quat.to_angles(np.array([1, 0, 0, 0]), order="ZYZ")
+
+    # test gimbal lock
+    q = np.array([0, 0.7071068, 0, 0.7071068])
+    angles = quat.to_angles(q, order="xyz")
+    assert np.allclose(angles, np.array([np.pi, -np.pi / 2, 0])), "to_angles failed for gimbal lock"
+
+    # test multiple angle sets
+    q = np.array([[1, 0, 0, 0], [0, 0.7071068, 0, 0.7071068], [0.5963678, 0.6903455, -0.1530459, 0.3799282]])
+    expected_angles = np.array([[0, 0, 0], [np.pi, -np.pi / 2, 0], [np.pi / 2, -np.pi / 4, np.pi / 9]])
+    result = quat.to_angles(q, order="xyz")
+    assert np.allclose(result, expected_angles, atol=1e-6), "to_angles failed for multiple quaternions"
 
 
 def test_to_rotmat():
@@ -421,21 +410,10 @@ def test_to_rotmat():
     expected_R = np.eye(3)
     assert np.allclose(R, expected_R), "Non-homogeneous identity quaternion should produce identity rotation matrix"
 
-    R = np.eye(3)
-    q_fromrot = quat.from_rotmat(R)
-    assert np.allclose(q_fromrot, q_eye), "Identity matrix should produce identity quaternion"
-
     q90xy = np.array([0.5, 0.5, 0.5, 0.5])  # 90-degree rotation about x-axis then y axis
     R_expected = np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]])  # Expected rotation matrix
     R = quat.to_rotmat(q90xy, scalarLast=False, homogenous=True)
     assert np.allclose(R, R_expected), "Quaternion -> Matrix -> Quaternion should be consistent"
-
-    with pytest.raises(ValueError):
-        quat.from_rotmat(np.zeros((2, 2)))  # Invalid shape
-
-    R = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 2]])  # Non-orthogonal matrix
-    with pytest.warns(UserWarning):
-        quat.from_rotmat(R)
 
     q = np.array([2, 0, 0, 0])  # Non-unit quaternion
     R = quat.to_rotmat(q, scalarLast=False, homogenous=True)
@@ -447,9 +425,50 @@ def test_to_rotmat():
     assert R.shape == (2, 3, 3), "Rotation matrices should have correct shape for multiple quaternions"
     assert np.allclose(R[0], np.eye(3)), "First quaternion should produce identity matrix"
 
-    R_array = np.array([np.eye(3), quat.to_rotmat(np.array([0.7071, 0.7071, 0, 0]))])
-    q_array = quat.from_rotmat(R_array)
-    assert q_array.shape == (2, 4), "Output quaternions should have correct shape for multiple rotation matrices"
+
+def test_from_rotmat():
+    R_identity = np.eye(3)
+    expected_quat = np.array([1, 0, 0, 0])
+    assert np.allclose(quat.from_rotmat(R_identity), expected_quat, atol=1e-6)
+
+    R_x = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])  # 90-degree rotation about x-axis
+    expected_quat = np.array([np.cos(np.pi / 4), np.sin(np.pi / 4), 0, 0])
+    assert np.allclose(quat.from_rotmat(R_x), expected_quat, atol=1e-6)
+
+    R_y = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])  # 90-degree rotation about y-axis
+    expected_quat = np.array([np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0])
+    assert np.allclose(quat.from_rotmat(R_y), expected_quat, atol=1e-6) or np.allclose(quat.from_rotmat(R_y), -expected_quat, atol=1e-6)
+
+    R_z = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])  # 90-degree rotation about z-axis
+    expected_quat = np.array([np.cos(np.pi / 4), 0, 0, np.sin(np.pi / 4)])
+    assert np.allclose(quat.from_rotmat(R_z), expected_quat, atol=1e-6)
+
+    R_arbitrary = np.array([[0.0000000, -0.7071068, 0.7071068], [0.9396926, -0.2418448, -0.2418448], [0.3420202, 0.6644630, 0.6644630]])  # rotoation xyz = X:20, Y45, Z90
+
+    expected_quat = np.array([0.5963678, 0.3799282, 0.1530459, 0.6903455])
+    assert np.allclose(quat.from_rotmat(R_arbitrary), expected_quat, atol=1e-6)
+
+    R_x = np.array([[1, 0, 0], [0, 0.7071068, -0.7071068], [0, 0.7071068, 0.7071068]])  # 90-degree rotation about x-axis
+    R_y = np.array([[0.7071068, 0, 0.7071068], [0, 1, 0], [-0.7071068, 0, 0.7071068]])
+    R_z = np.array([[0.7071068, -0.7071068, 0], [0.7071068, 0.7071068, 0], [0, 0, 1]])  # 90-degree rotation about z-axis
+    rotations = np.concat([R_x[np.newaxis, :], R_y[np.newaxis, :], R_z[np.newaxis, :]])
+
+    expected_quats = np.array([[0.9238795, 0.3826834, 0, 0], [0.9238795, 0, 0.3826834, 0], [0.9238795, 0, 0, 0.3826834]])
+    computed_quats = quat.from_rotmat(rotations)
+
+    for cq, eq in zip(computed_quats, expected_quats):
+        assert np.allclose(cq, eq, atol=1e-6)
+
+    R_neg_trace = np.array([[-0.5, -0.5, 0.7071], [-0.5, -0.5, -0.7071], [0.7071, -0.7071, 0]])
+    rotations = np.concat([R_x[np.newaxis, :], R_neg_trace[np.newaxis, :], R_z[np.newaxis, :]])
+    expected_quats = np.array([[0.9238795, 0.3826834, 0, 0], [0.0, 0.63245432, -0.63245432, 0.44721703], [0.9238795, 0, 0, 0.3826834]])
+    assert np.allclose(quat.from_rotmat(rotations), expected_quats, atol=1e-6)
+
+    with pytest.raises(ValueError):
+        quat.from_rotmat(np.eye(4))  # Invalid shape
+
+    with pytest.raises(ValueError):
+        quat.from_rotmat(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 2]]))  # Not a valid rotation matrix
 
 
 def test_from_axis_angle(q, q_normalized):
@@ -460,18 +479,24 @@ def test_from_axis_angle(q, q_normalized):
 
     ax = np.array([[0, 0, 1, np.pi]])  # 180-degree rotation about z-axis
     q = quat.from_axis_angle(ax, angleFirst=False)
-    expected_q = np.array([[0, 0, 0, 1]])  # Quaternion for 180-degree z-axis rotation
+    expected_q = np.array([[0, 0, 0, 1]])
     assert np.allclose(q, expected_q), "180-degree z-axis rotation should produce correct quaternion"
 
     ax = np.array([[np.pi, 0, 0, 1]])  # 180-degree rotation about z-axis, angle first
     q = quat.from_axis_angle(ax, angleFirst=True)
-    expected_q = np.array([[0, 0, 0, 1]])  # Quaternion for 180-degree z-axis rotation
+    expected_q = np.array([[0, 0, 0, 1]])
     assert np.allclose(q, expected_q), "Angle-first input should produce correct quaternion"
 
     ax = np.array([[0, 0, 2, np.pi]])  # 180-degree rotation about a non-unit z-axis
     q = quat.from_axis_angle(ax, angleFirst=False)
+
     expected_q = np.array([[0, 0, 0, 1]])  # Should normalize the axis
     assert np.allclose(q, expected_q), "Non-unit axis should be normalized"
+
+    ax = np.array([[0, 0, 0, 0]])  # all zeros
+    q = quat.from_axis_angle(ax, angleFirst=True)
+    expected_q = np.array([[1, 0, 0, 0]])  # Should normalize the axis
+    assert np.allclose(q, expected_q), "All zero resturns identity quaternion"
 
     ax = np.array(
         [
@@ -504,3 +529,13 @@ def test_from_axis_angle(q, q_normalized):
     q = quat.from_axis_angle(ax, angleFirst=False)
     expected_q = np.array([[np.sqrt(2) / 2, 0, 0, np.sqrt(2) / 2]])
     assert np.allclose(q, expected_q), "Single input should produce correct quaternion"
+
+
+def test_yaw_quat():
+    q = np.array([0.5, 0.5, 0, 0.7071068])
+    expected_yaw = 90
+    assert np.allclose(quat.yaw(q), expected_yaw), "Yaw calculation failed"
+
+    q = np.array([[0.5, 0.5, 0, 0.7071068], [0.5, 0.5, 0, 0.7071068]])
+    expected_yaw = np.array([90, 90])
+    assert np.allclose(quat.yaw(q), expected_yaw), "Yaw calculation failed"

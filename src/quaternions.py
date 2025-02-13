@@ -1,5 +1,3 @@
-from warnings import warn
-
 import numpy as np
 
 
@@ -375,9 +373,9 @@ def quat_rotate(q, v):
         return rotated_quat[:, 1:]  # Return a 2D array (N, 3)
 
 
-def yaw_quat(q):
+def yaw(q, yaw_index=2):
     """
-    Calculate the yaw angle (rotation about the vertical axis) from a quaternion.
+    Extract the yaw angle from a quaternion.
 
     Parameters
     ----------
@@ -389,34 +387,14 @@ def yaw_quat(q):
     float or np.ndarray
         Yaw angle in degrees (or an array of yaw angles), ranging from -180 to 180.
 
-    Notes
-    -----
-    Positive yaw corresponds to a counterclockwise rotation about the vertical axis.
     """
-    q = np.asarray(q)
-
-    # Ensure q has the correct shape
-    if q.ndim == 1:  # Single quaternion
-        q = q[np.newaxis, :]  # Add batch dimension (1, 4)
-
-    # Extract quaternion components
-    q1, q2, q3, q4 = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
-
-    # Calculate yaw for each quaternion in the batch
-    a12 = 2 * (q2 * q3 + q1 * q4)
-    a22 = q1 * q1 + q2 * q2 - q3 * q3 - q4 * q4
-
-    yaw = np.degrees(np.arctan2(a12, a22))  # Compute yaw angles in degrees
-
-    if yaw.shape[0] == 1:  # Single quaternion case
-        return yaw[0]  # Return a single value (float)
-    else:  # Batch case
-        return yaw  # Return an array of yaw values for each quaternion
+    euler_angles = np.degrees(to_angles(q, order="xyz"))
+    return euler_angles[yaw_index] if euler_angles.ndim == 1 else euler_angles[:, yaw_index]
 
 
-def to_angles(q, scalarLast=False):
+def to_angles(q: np.ndarray, order: str = "XYZ", scalarLast: bool = False):
     """
-    Returns the Euler angles (phi, theta, psi) from a quaternion.
+    Returns the Euler angles (phi, theta, psi) from a quaternion. Based on algorithm described at: https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToEuler/Quaternions.pdf
 
     Parameters
     ----------
@@ -431,27 +409,39 @@ def to_angles(q, scalarLast=False):
         Euler angles in the order (phi, theta, psi).
     """
     _validate_input(q, "quaternion")
+    order = order.upper()
 
-    if q.ndim > 1:
-        q = q.T
+    if len(order) != len(set(order)):
+        raise ValueError("Rotation order must not contain duplicate characters")
+
+    q = normalize(q)
 
     if scalarLast:
-        q0, qx, qy, qz = to_scalar_first(q)
-    else:
-        q0, qx, qy, qz = q.squeeze()
+        q = to_scalar_first(q)
+    if q.ndim == 1:
+        q = q[np.newaxis, :]  # Add batch dimension if single quaternion
 
-    phi = np.arctan2(qx + qz, q0 - qy) - np.arctan2(qz - qx, qy + q0)
-    theta = np.arccos((q0 - qy) ** 2 + (qx + qz) ** 2 - 1) - np.pi / 2
-    psi = np.arctan2(qx + qz, q0 - qy) + np.arctan2(qz - qx, qy + q0)
+    e = -1 if order in ["XYZ", "YZX", "ZXY"] else 1  # using same variable nameing (e) as in the reference (see docstring)
 
-    euler_angles = np.array([phi, theta, psi])
-    # validate data dimensions in correct order
-    if np.argmax(euler_angles.shape) != 0:
-        euler_angles = euler_angles.T
-    return euler_angles
+    # set the quaternion rotation order specified by order
+    map = {"X": 1, "Y": 2, "Z": 3}
+    q0, q1, q2, q3 = q[:, 0], q[:, map[order[0]]], q[:, map[order[1]]], q[:, map[order[2]]]
+
+    angles = np.full((q0.shape[0], 3), 0.0)
+
+    sin_theta = np.clip(2 * (q0 * q2 + e * q3 * q1), -1, 1)
+    gimbal_lock_check = np.abs(sin_theta) == 1.0
+
+    angles[:, 1] = np.arcsin(sin_theta)
+
+    angles[:, 0] = np.where(gimbal_lock_check, 2 * np.arctan2(q1, q0), np.arctan2(2 * (q0 * q1 - e * q2 * q3), 1 - 2 * (q1**2 + q2**2)))
+
+    angles[:, 2] = np.where(gimbal_lock_check, np.zeros(angles[:, 2].shape), np.arctan2(2 * (q0 * q3 - e * q1 * q2), 1 - 2 * (q2**2 + q3**2)))
+
+    return angles.squeeze() if angles.shape[0] == 1 else angles
 
 
-def from_angles(angles: np.ndarray, order="xyz"):
+def from_angles(angles: np.ndarray, order: str = "XYZ"):
     """
     Returns the quaternion from a series of xyz Euler angles represented as extrinsic rotations (global frame).
 
@@ -468,8 +458,7 @@ def from_angles(angles: np.ndarray, order="xyz"):
         Quaternion in scalar-first form.
 
     """
-    if angles.ndim > 1:
-        angles = angles.T
+
     order = order.upper()
     _validate_input(angles, "euler")
 
@@ -483,7 +472,7 @@ def from_angles(angles: np.ndarray, order="xyz"):
     return q
 
 
-def to_rotmat(q, scalarLast=False, homogenous=True):
+def to_rotmat(q: np.ndarray, scalarLast: bool = False, homogenous: bool = True):
     """
     Converts a quaternion to a right-handed rotation matrix.
 
@@ -573,63 +562,82 @@ def from_rotmat(R: np.ndarray):
     ValueError
         If R is not a 2D or 3D matrix with shape (3, 3) or (N, 3, 3).
 
-    Warns
-    -----
-    UserWarning
-        If R is not orthogonal.
     """
-    # largest_dim = np.argmax(R.shape)
-    if R.ndim not in [2, 3]:
-        raise ValueError("R must be a 2 or 3 dimensional matrix")
-    if R.shape[-2:] != (3, 3):
-        raise ValueError(f"Function expects a 3x3 or Nx3x3 matrix. You passed a {R.shape} matrix.")
-    if R.ndim == 3:
-        for i in range(R.shape[0]):
-            if not np.allclose(np.dot(R[i, :, :], R[i, :, :].T), np.eye(3), atol=1e-6):
-                warn("R is not orthogonal")
-    else:
-        if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
-            warn("R is not orthogonal")
-    q_out = []
     if R.ndim == 2:
         R = R[np.newaxis, :, :]
-    for i in range(R.shape[0]):
-        r = R[i, :, :]
-        q = np.empty((4))
-        trace = np.trace(r)
+    _validate_input(R, "rotmat")
 
-        if trace > 0.0:
-            sqrt_trace = np.sqrt(1.0 + trace)
-            q[0] = 0.5 * sqrt_trace
-            q[1] = 0.5 / sqrt_trace * (r[2, 1] - r[1, 2])
-            q[2] = 0.5 / sqrt_trace * (r[0, 2] - r[2, 0])
-            q[3] = 0.5 / sqrt_trace * (r[1, 0] - r[0, 1])
-        else:
-            if r[0, 0] > r[1, 1] and r[0, 0] > r[2, 2]:
-                sqrt_trace = np.sqrt(1.0 + r[0, 0] - r[1, 1] - r[2, 2])
-                q[0] = 0.5 / sqrt_trace * (r[2, 1] - r[1, 2])
-                q[1] = 0.5 * sqrt_trace
-                q[2] = 0.5 / sqrt_trace * (r[1, 0] + r[0, 1])
-                q[3] = 0.5 / sqrt_trace * (r[0, 2] + r[2, 0])
-            elif r[1, 1] > r[2, 2]:
-                sqrt_trace = np.sqrt(1.0 + r[1, 1] - r[0, 0] - r[2, 2])
-                q[0] = 0.5 / sqrt_trace * (r[0, 2] - r[2, 0])
-                q[1] = 0.5 / sqrt_trace * (r[1, 0] + r[0, 1])
-                q[2] = 0.5 * sqrt_trace
-                q[3] = 0.5 / sqrt_trace * (r[2, 1] + r[1, 2])
-            else:
-                sqrt_trace = np.sqrt(1.0 + r[2, 2] - r[0, 0] - r[1, 1])
-                q[0] = 0.5 / sqrt_trace * (r[1, 0] - r[0, 1])
-                q[1] = 0.5 / sqrt_trace * (r[0, 2] + r[2, 0])
-                q[2] = 0.5 / sqrt_trace * (r[2, 1] + r[1, 2])
-                q[3] = 0.5 * sqrt_trace
+    if not (np.allclose(np.linalg.det(R), 1.0, atol=1e-4)):
+        raise ValueError("Input matrix is not orthogonal")
 
-        q_out.append(q / np.linalg.norm(q, axis=0, keepdims=True))
-    q_out_arr = np.vstack(q_out)
-    return q_out_arr if q_out_arr.shape[0] > 1 else q_out_arr.squeeze()
+    q_out = np.empty((R.shape[0], 4))
+    trace = np.trace(R, axis1=1, axis2=2)
+    mask = trace > 0.0
+    if np.any(mask):
+        sqrt_trace = np.sqrt(1.0 + trace[mask]) * 2
+        q_out[mask, 0] = 0.25 * sqrt_trace
+        q_out[mask, 1] = (R[mask, 2, 1] - R[mask, 1, 2]) / sqrt_trace
+        q_out[mask, 2] = (R[mask, 0, 2] - R[mask, 2, 0]) / sqrt_trace
+        q_out[mask, 3] = (R[mask, 1, 0] - R[mask, 0, 1]) / sqrt_trace
+
+    # trace < 0 (handle diff due to numerical instability)
+    not_mask = ~mask
+    if np.any(not_mask):
+        diag = np.diagonal(R[not_mask], axis1=1, axis2=2)
+        max_diag_idx = np.argmax(diag, axis=1)
+
+        sqrt_trace = np.sqrt(1.0 + diag[np.arange(len(diag)), max_diag_idx]) * 2
+
+        q_out[not_mask, 0] = (R[not_mask, 2, 1] - R[not_mask, 1, 2]) / sqrt_trace
+        q_out[not_mask, 1] = (
+            (max_diag_idx == 0) * (0.25 * sqrt_trace)
+            + (max_diag_idx == 1) * (R[not_mask, 1, 0] + R[not_mask, 0, 1]) / sqrt_trace
+            + (max_diag_idx == 2) * (R[not_mask, 0, 2] + R[not_mask, 2, 0]) / sqrt_trace
+        )
+        q_out[not_mask, 2] = (
+            (max_diag_idx == 0) * (R[not_mask, 1, 0] + R[not_mask, 0, 1]) / sqrt_trace
+            + (max_diag_idx == 1) * (0.25 * sqrt_trace)
+            + (max_diag_idx == 2) * (R[not_mask, 2, 1] + R[not_mask, 1, 2]) / sqrt_trace
+        )
+        q_out[not_mask, 3] = (
+            (max_diag_idx == 0) * (R[not_mask, 0, 2] + R[not_mask, 2, 0]) / sqrt_trace
+            + (max_diag_idx == 1) * (R[not_mask, 2, 1] + R[not_mask, 1, 2]) / sqrt_trace
+            + (max_diag_idx == 2) * (0.25 * sqrt_trace)
+        )
+
+    q_out /= np.linalg.norm(q_out, axis=1, keepdims=True)
+
+    # return q_out if q_out.shape[0] > 1 else q_out.squeeze()
+    # for i, idx in enumerate(max_diag_idx):
+    #     r = R[not_mask][i]
+    #     q = np.zeros(4)
+    #     if idx == 0:
+    #         sqrt_trace = np.sqrt(1.0 + r[0, 0] - r[1, 1] - r[2, 2])
+    #         q[0] = (r[2, 1] - r[1, 2]) / (2.0 * sqrt_trace)
+    #         q[1] = 0.5 * sqrt_trace
+    #         q[2] = (r[1, 0] + r[0, 1]) / (2.0 * sqrt_trace)
+    #         q[3] = (r[0, 2] + r[2, 0]) / (2.0 * sqrt_trace)
+    #     elif idx == 1:
+    #         sqrt_trace = np.sqrt(1.0 + r[1, 1] - r[0, 0] - r[2, 2])
+    #         q[0] = (r[0, 2] - r[2, 0]) / (2.0 * sqrt_trace)
+    #         q[1] = (r[1, 0] + r[0, 1]) / (2.0 * sqrt_trace)
+    #         q[2] = 0.5 * sqrt_trace
+    #         q[3] = (r[2, 1] + r[1, 2]) / (2.0 * sqrt_trace)
+    #     else:
+    #         sqrt_trace = np.sqrt(1.0 + r[2, 2] - r[0, 0] - r[1, 1])
+    #         q[0] = (r[1, 0] - r[0, 1]) / (2.0 * sqrt_trace)
+    #         q[1] = (r[0, 2] + r[2, 0]) / (2.0 * sqrt_trace)
+    #         q[2] = (r[2, 1] + r[1, 2]) / (2.0 * sqrt_trace)
+    #         q[3] = 0.5 * sqrt_trace
+
+    #     q_out[not_mask][i] = q
+
+    # q_out /= np.linalg.norm(q_out, axis=1, keepdims=True)
+
+    return q_out if q_out.shape[0] > 1 else q_out.squeeze()
 
 
-def from_axis_angle(ax: np.ndarray, angleFirst=True):
+def from_axis_angle(ax: np.ndarray, angleFirst: bool = True):
     """
     Convert a rotation in axis-angle form to a quaternion in scalar-first form.
 
@@ -662,6 +670,7 @@ def from_axis_angle(ax: np.ndarray, angleFirst=True):
     for i in range(ax.shape[0]):
         if all(ax[i, :] == 0):
             q[i, :] = np.array([1, 0, 0, 0])
+            continue
         q[i, 0] = np.cos(angle[i] / 2)
         q[i, 1:] = np.sin(angle[i] / 2) * axis[i] / np.linalg.norm(axis[i])
     return q
