@@ -28,7 +28,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install .[test] pytest pytest-cov
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install coveralls
+
     - name: Test with pytest
       run: |
-        pytest -p pytest_cov -v --cov=src/ --cov-report=term-missing
+            coverage run --source=src/ -m pytest tests/  
+    #   pytest -p pytest_cov -v --cov=src/ --cov-report=term-missing --cov-report xml:coverage.xml
