@@ -1,6 +1,6 @@
 # Python Quaternions
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Coverage Status](https://coveralls.io/repos/github/jchar32/quaternions/badge.svg?branch=main)](https://coveralls.io/github/jchar32/quaternions?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/jchar32/quaternions/badge.svg?branch=main&kill_cache=1)](https://coveralls.io/github/jchar32/quaternions?branch=main)
 
 A lightweight Python package for handling quaternions. This package provides efficient tools for working with quaternions, including conversions between different rotation representations (Euler angles, rotation matrices) and common quaternion operations.
 
