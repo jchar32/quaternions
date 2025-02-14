@@ -9,9 +9,16 @@ A lightweight Python package for handling quaternions. This package provides eff
 
 ### 1. Basic Quaternion Operations
 
-```python
-pip install git+https://github.com/jchar32/quaternions.git
+```bash
+pip install https://github.com/jchar32/quaternions.git
 ```
+
+Verify installation:
+```python
+import quaternions
+print(quaternions.__version__)
+```
+
 
 ```python
 import numpy as np
