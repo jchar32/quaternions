@@ -1,6 +1,6 @@
 [project]
 name = "quaternions"
-version = "0.1.0"
+version = "2025.1.0"
 description = "A set of functions to manipulate quaternions."
 readme = "README.md"
 authors = [
