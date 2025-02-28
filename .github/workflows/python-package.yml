@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python package
+name: Quaternions
 
 on:
   push:
@@ -36,5 +36,4 @@ jobs:
             coveralls
       env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #   pytest -p pytest_cov -v --cov=src/ --cov-report=term-missing --cov-report xml:coverage.xml
-    #coverage run --source=src/ -m pytest tests/
+            
